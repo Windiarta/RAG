@@ -1,0 +1,11 @@
+ui:
+  default_ocr: false
+  default_chunk_method: recursive
+  default_chunk_size: 1000
+  default_overlap: 200
+  default_max_retrieve: 4
+  default_system_instruction: |
+    You are a helpful assistant. Answer only using the retrieved context. If unsure, say you don't know.
+vector_store:
+  collection_name: rag_documents
+  persist_path: data/chroma

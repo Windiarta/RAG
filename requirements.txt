@@ -1,0 +1,15 @@
+chromadb==0.5.5
+google-generativeai==0.7.2
+streamlit==1.36.0
+PyPDF2==3.0.1
+python-dotenv==1.0.1
+PyYAML==6.0.2
+tenacity==8.2.3
+pytest==8.2.2
+pytest-mock==3.14.0
+onnxruntime==1.16.3
+fastapi==0.110.0
+uvicorn[standard]==0.28.0
+python-multipart==0.0.9
+Jinja2==3.1.4
+
