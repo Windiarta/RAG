@@ -1,6 +1,6 @@
 ui:
-  default_ocr: false
-  default_chunk_method: recursive
+  default_ocr: true
+  default_chunk_method: paragraph
   default_chunk_size: 1000
   default_overlap: 200
   default_max_retrieve: 4

@@ -1,3 +1,4 @@
+from chunk import Chunk
 import io
 import os
 import logging
@@ -5,14 +6,14 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Query
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
 import yaml
 
 from modules.logging_config import configure_logging
-from modules.ocr import extract_text
+from modules.ocr import extract_text, Chunks, ChunkingMethod
 from modules.chunker import (
 	chunk_text,
 	chunk_by_sentence,
@@ -69,21 +70,6 @@ def spa_index() -> HTMLResponse:
     return templates.TemplateResponse("wizard.html", {"request": Request, "config": CONFIG["ui"]})
 
 
-def get_chunks_by_method(method: str, text: str, chunk_size: int, overlap: int) -> List[str]:
-	method = (method or "").lower()
-	if method == "sentence":
-		return chunk_by_sentence(text, max_chars=chunk_size)
-	if method == "paragraph":
-		return chunk_by_paragraph(text, max_chars=chunk_size)
-	if method == "markdown":
-		return chunk_by_markdown(text, max_chars=chunk_size)
-	if method == "page":
-		# page-level split approximated by paragraphs with very large size
-		return chunk_by_paragraph(text, max_chars=10_000_000)
-	# recursive / default
-	return chunk_recursive(text, chunk_size=chunk_size, overlap=overlap)
-
-
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     if WEB_DIST.exists():
@@ -126,11 +112,8 @@ async def api_upload(
 		for p in saved_paths:
 			filename = Path(p).name
 			try:
-				if use_ocr:
-					text = extract_text(p)
-				else:
-					text = Path(p).read_text(encoding="utf-8", errors="ignore")
-				chunks = get_chunks_by_method(method, text, chunk_size, overlap)
+				text = await extract_text(p, use_ocr)
+				chunks = Chunks(ChunkingMethod.PARAGRAPH).chunk_text(text)
 				doc_id = store.add_chunks(None, chunks, metadata={"filename": filename, **(meta_base or {})})
 				documents.append({"document_id": doc_id, "filename": filename, "num_chunks": len(chunks)})
 				total_chunks += len(chunks)
@@ -152,17 +135,6 @@ async def api_upload(
 		"document_id": documents[0]["document_id"] if documents else None,
 		"documents": documents,
 	}
-
-
-@app.post("/api/chunk")
-def api_chunk(method: str = Form("recursive"), chunk_size: int = Form(1000), overlap: int = Form(200), file_path: str = Form(...), use_ocr: bool = Form(False)):
-	try:
-		text = extract_text(file_path) if use_ocr else Path(file_path).read_text(encoding="utf-8", errors="ignore")
-		chunks = get_chunks_by_method(method, text, chunk_size, overlap)
-		return {"chunks": chunks}
-	except Exception as e:
-		raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.post("/api/save")
 def api_save(chunks: List[str] = Form(...), metadata: str = Form("{}")):
