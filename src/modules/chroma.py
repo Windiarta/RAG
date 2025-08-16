@@ -6,7 +6,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 import chromadb
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings, IDs, Metadatas
 
-from .chunker import chunk_text
+from .ocr import Chunks
 from .logging_config import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -42,19 +42,6 @@ class VectorStore:
 		from .gemini import GeminiClient
 		client = GeminiClient()
 		return client.embed_texts(texts)
-
-	def add_document(self, document_id: Optional[str], text: str, metadata: Optional[Dict] = None, chunk_size: int = 1000, overlap: int = 200) -> str:
-		"""Add a document by chunking and embedding. Returns document_id."""
-		if not text:
-			raise ValueError("Text is empty")
-		document_id = document_id or str(uuid.uuid4())
-		logger.debug("Adding document with metadata=%s", metadata)
-		chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
-		ids: IDs = [f"{document_id}:{i}" for i in range(len(chunks))]
-		metas: Metadatas = [{"document_id": document_id, **(metadata or {})} for _ in chunks]
-		self._collection.add(ids=ids, documents=chunks, metadatas=metas)
-		logger.info("Indexed %d chunks for document_id=%s", len(ids), document_id)
-		return document_id
 
 	def add_chunks(self, document_id: Optional[str], chunks: List[str], metadata: Optional[Dict] = None) -> str:
 		"""Add precomputed chunks for a document."""

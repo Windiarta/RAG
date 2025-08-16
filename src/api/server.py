@@ -14,13 +14,6 @@ import yaml
 
 from modules.logging_config import configure_logging
 from modules.ocr import extract_text, Chunks, ChunkingMethod
-from modules.chunker import (
-	chunk_text,
-	chunk_by_sentence,
-	chunk_by_paragraph,
-	chunk_recursive,
-	chunk_by_markdown,
-)
 from modules.chroma import VectorStore
 from modules.retriever import Retriever
 
