@@ -64,14 +64,14 @@ def spa_index() -> HTMLResponse:
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request):
+async def home(request: Request):
     if WEB_DIST.exists():
         return spa_index()
     return templates.TemplateResponse("wizard.html", {"request": request, "config": CONFIG["ui"]})
 
 
 @app.get("/api/config")
-def api_config():
+async def api_config():
 	return {"ui": CONFIG.get("ui", {}), "vector_store": CONFIG.get("vector_store", {})}
 
 
@@ -130,7 +130,7 @@ async def api_upload(
 	}
 
 @app.post("/api/save")
-def api_save(chunks: List[str] = Form(...), metadata: str = Form("{}")):
+async def api_save(chunks: List[str] = Form(...), metadata: str = Form("{}")):
 	import json
 	meta = json.loads(metadata or "{}")
 	store = VectorStore(persist_path=CONFIG["vector_store"]["persist_path"], collection_name=CONFIG["vector_store"]["collection_name"])
@@ -139,14 +139,14 @@ def api_save(chunks: List[str] = Form(...), metadata: str = Form("{}")):
 
 
 @app.get("/chat", response_class=HTMLResponse)
-def chat_ui(request: Request):
+async def chat_ui(request: Request):
     if WEB_DIST.exists():
         return spa_index()
     return templates.TemplateResponse("chat.html", {"request": request, "config": CONFIG["ui"]})
 
 
 @app.post("/api/retrieve")
-def api_retrieve(question: str = Form(...), filters: str = Form("{}"), top_k: int = Form(4)):
+async def api_retrieve(question: str = Form(...), filters: str = Form("{}"), top_k: int = Form(4)):
 	import json
 	flt = json.loads(filters or "{}")
 	store = VectorStore(persist_path=CONFIG["vector_store"]["persist_path"], collection_name=CONFIG["vector_store"]["collection_name"])
@@ -167,7 +167,7 @@ def api_retrieve(question: str = Form(...), filters: str = Form("{}"), top_k: in
 
 
 @app.post("/api/answer")
-def api_answer(question: str = Form(...), prompt: str = Form(""), filters: str = Form("{}"), top_k: int = Form(4)):
+async def api_answer(question: str = Form(...), prompt: str = Form(""), filters: str = Form("{}"), top_k: int = Form(4)):
 	import json
 	flt = json.loads(filters or "{}")
 	retriever = Retriever()
@@ -187,7 +187,7 @@ def api_answer(question: str = Form(...), prompt: str = Form(""), filters: str =
 
 # Document management endpoints
 @app.get("/api/documents")
-def api_list_documents(filename: Optional[str] = Query(None)):
+async def api_list_documents(filename: Optional[str] = Query(None)):
 	store = VectorStore(persist_path=CONFIG["vector_store"]["persist_path"], collection_name=CONFIG["vector_store"]["collection_name"])
 	docs = store.list_documents()
 	if filename:
@@ -197,7 +197,7 @@ def api_list_documents(filename: Optional[str] = Query(None)):
 
 
 @app.delete("/api/documents/{document_id}")
-def api_delete_document(document_id: str):
+async def api_delete_document(document_id: str):
 	store = VectorStore(persist_path=CONFIG["vector_store"]["persist_path"], collection_name=CONFIG["vector_store"]["collection_name"])
 	deleted = store.delete_document(document_id)
 	return {"deleted": deleted, "document_id": document_id}
@@ -205,7 +205,7 @@ def api_delete_document(document_id: str):
 
 # Catch-all to serve SPA client-side routes
 @app.get("/{full_path:path}", response_class=HTMLResponse)
-def spa_catch_all(full_path: str):
+async def spa_catch_all(full_path: str):
     if WEB_DIST.exists():
         return spa_index()
     # Fallback to home template when SPA not built

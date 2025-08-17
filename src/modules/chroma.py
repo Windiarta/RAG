@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+import concurrent.futures
 from typing import Callable, Dict, List, Optional, Tuple
 
 import chromadb
@@ -34,14 +35,39 @@ class VectorStore:
 		logger.info("VectorStore ready at %s collection=%s", self.persist_path, self.collection_name)
 
 	def _get_or_create_collection(self):
-		embedding_function = _CallableEmbeddingFn(self._embedder_fn or self._default_embed)
+		# Handle async embedder functions by running them in a separate thread
+		def sync_embedder(texts: List[str]) -> List[List[float]]:
+			embed_fn = self._embedder_fn or self._default_embed
+			if callable(embed_fn):
+				import asyncio
+				if asyncio.iscoroutinefunction(embed_fn):
+					# Run async function in a separate thread to avoid event loop conflicts
+					import concurrent.futures
+					with concurrent.futures.ThreadPoolExecutor() as executor:
+						future = executor.submit(self._run_async_embed, embed_fn, texts)
+						return future.result()
+				else:
+					return embed_fn(texts)
+			else:
+				raise ValueError("Embedder function is not callable")
+		embedding_function = _CallableEmbeddingFn(sync_embedder)
 		return self._client.get_or_create_collection(name=self.collection_name, embedding_function=embedding_function)
 
-	def _default_embed(self, texts: List[str]) -> List[List[float]]:
+	def _run_async_embed(self, embed_fn, texts):
+		"""Run async embed function in a new event loop in a separate thread."""
+		import asyncio
+		loop = asyncio.new_event_loop()
+		asyncio.set_event_loop(loop)
+		try:
+			return loop.run_until_complete(embed_fn(texts))
+		finally:
+			loop.close()
+
+	async def _default_embed(self, texts: List[str]) -> List[List[float]]:
 		# Lazy import to avoid heavy dependency at test import time
 		from .gemini import GeminiClient
 		client = GeminiClient()
-		return client.embed_texts(texts)
+		return await client.embed_texts(texts)
 
 	def add_chunks(self, document_id: Optional[str], chunks: List[str], metadata: Optional[Dict] = None) -> str:
 		"""Add precomputed chunks for a document."""

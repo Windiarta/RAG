@@ -26,14 +26,19 @@ class GeminiClient:
 		logger.info("GeminiClient initialized with model=%s, embeddings_model=%s", self.generation_model, self.embeddings_model)
 
 	@retry(wait=wait_exponential(multiplier=1, min=1, max=8), stop=stop_after_attempt(3))
-	def embed_texts(self, texts: List[str]) -> List[List[float]]:
+	async def embed_texts(self, texts: List[str]) -> List[List[float]]:
 		"""Return embeddings for a list of texts using Gemini embeddings model."""
 		logger.debug("Embedding %d texts", len(texts))
 		embeddings: List[List[float]] = []
-		for text in texts:
-			result = genai.embed_content(model=self.embeddings_model, content=text)
-			vector = result["embedding"] if isinstance(result, dict) else result.embedding
-			embeddings.append(vector)
+
+		async def _embed_one(text):
+			result = await genai.embed_content_async(model=self.embeddings_model, content=text)
+			return result["embedding"] if isinstance(result, dict) else result.embedding
+
+		async def _embed_all(texts):
+			return [await _embed_one(text) for text in texts]
+
+		embeddings = await _embed_all(texts)
 		return embeddings
 
 	@retry(wait=wait_exponential(multiplier=1, min=1, max=8), stop=stop_after_attempt(3))
