@@ -13,10 +13,10 @@ import json
 import base64
 from pdf2image import convert_from_bytes
 import asyncio
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from ratelimit import sleep_and_retry, limits
 from pathlib import Path
 from dotenv import load_dotenv
-import aiohttp
 
 from enum import Enum
 
@@ -91,10 +91,8 @@ async def extract_text(file_path: str, use_ocr: bool = False) -> str:
                 ocr = GeminiOCR()
                 with open(file_path, 'rb') as f:
                     pdf_bytes = io.BytesIO(f.read())
-                    # Run OCR in the background
-                    import asyncio
-                    task = asyncio.create_task(ocr.process_pdf(pdf_bytes))
-                    text = await task
+                    text = await ocr.process_pdf(pdf_bytes)
+                    if "https://ai.google.dev/gemini-api/docs/rate-limits" in text: raise
                     return text
             except Exception as ocr_error:
                 logger.warning(f"OCR failed for {file_path}, falling back to PyPDF2: {str(ocr_error)}")
@@ -149,13 +147,13 @@ class DocumentHandler:
 
 
 class GeminiOCR:
-    def __init__(self, model_name: str = "gemini-2.0-flash"):
+    def __init__(self, model_name: str = "gemini-2.0-flash-lite"):
         '''
         Initialize OCR Helper with Vertex AI configuration.
 
         Args:
             api_key (str): API key for the model.
-            model_name (str): Name of the model to use (currently only supports gemini models). Defaults to "gemini-2.0-flash".
+            model_name (str): Name of the model to use (currently only supports gemini models). Defaults to "gemini-2.0-flash-lite".
         '''
         load_dotenv()
         configure_logging()
@@ -187,34 +185,15 @@ class GeminiOCR:
 
         return image
 
-    async def _process_image_async(
+    @sleep_and_retry
+    @limits(calls=500, period=60)  # Maximum 500 calls per minute, refer to https://ai.google.dev/gemini-api/docs/rate-limits#free-tier
+    def _process_image_sync(
             self, 
             image_input: Union[str, bytes, io.BytesIO, Image.Image], 
             prompt: Optional[str] = None, 
             page_number: Optional[int] = 0,
             retry: int = 3
         ) -> str:
-        RATELIMIT = 500  # Refer to https://ai.google.dev/gemini-api/docs/rate-limits
-        current_time = asyncio.get_event_loop().time()
-        if not hasattr(self, '_last_call_time'):
-            self._last_call_time = 0
-        if not hasattr(self, '_call_count'):
-            self._call_count = 0
-        
-        # Reset counter if a minute has passed
-        if current_time - self._last_call_time >= 60:
-            self._call_count = 0
-            self._last_call_time = current_time
-        
-        # Check rate limit
-        if self._call_count >= RATELIMIT:
-            wait_time = 60 - (current_time - self._last_call_time)
-            if wait_time > 0:
-                await asyncio.sleep(wait_time)
-                self._call_count = 0
-                self._last_call_time = asyncio.get_event_loop().time()
-        
-        self._call_count += 1
         """Process image using Vertex AI Gemini Vision model.
         
         Args:
@@ -249,25 +228,14 @@ class GeminiOCR:
             if isinstance(image_input, str):
                 # Handle URL or file path
                 if image_input.startswith(('http://', 'https://')):
-                    # Use aiohttp for async HTTP requests, fallback to requests if not available
-                    try:
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(image_input) as response:
-                                if response.status != 200:
-                                    raise ValueError(f"Failed to fetch image from URL: {response.status}")
-                                content = await response.read()
-                                image = Image.open(io.BytesIO(content))
-                    except ImportError:
-                        # Fallback to synchronous requests if aiohttp not available
-                        response = requests.get(image_input)
-                        if response.status_code != 200:
-                            raise ValueError(f"Failed to fetch image from URL: {response.status_code}")
-                        image = Image.open(io.BytesIO(response.content))
+                    response = requests.get(image_input)
+                    if response.status_code != 200:
+                        raise ValueError(f"Failed to fetch image from URL: {response.status_code}")
+                    image = Image.open(io.BytesIO(response.content))
                 else:
                     if not os.path.exists(image_input):
                         raise ValueError(f"Image file not found: {image_input}")
-                    # Use asyncio.to_thread for file I/O operations
-                    image = await asyncio.to_thread(Image.open, image_input)
+                    image = Image.open(image_input)
             elif isinstance(image_input, bytes):
                 image = Image.open(io.BytesIO(image_input))
             elif isinstance(image_input, io.BytesIO):
@@ -300,9 +268,8 @@ class GeminiOCR:
                 "data": base64.b64encode(img_bytes).decode('utf-8')
             }
             
-            # Generate response from Gemini - use asyncio.to_thread for the synchronous API call
-            response = await asyncio.to_thread(
-                self.model.generate_content,
+            # Generate response from Gemini
+            response = self.model.generate_content(
                 contents=[prompt, image_data],
                 generation_config={
                     "temperature": 0.1,
@@ -322,7 +289,7 @@ class GeminiOCR:
         except Exception as e:
             logger.error(f"Error processing image with Gemini: {str(e)}")
             if retry > 0:
-                return await self._process_image_async(image_input, prompt, page_number, retry)
+                return self._process_image_sync(image_input, prompt, page_number, retry)
             raise
         finally:
             # Clean up resources
@@ -369,23 +336,31 @@ class GeminiOCR:
                 size=(1654, 2340)  # Limit max dimensions (A4 at 200 DPI)
             )
             
-            # Process images concurrently using asyncio.gather
-            tasks = []
-            for i, image in enumerate(images):
-                task = self._process_image_async(image, prompt, page_number=i)
-                tasks.append(task)
-            
-            # Execute all tasks concurrently
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Process results
-            text_parts = [""] * len(images)  # Pre-allocate list
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(f"Error processing image {i + 1}: {str(result)}")
-                    text_parts[i] = f"Error processing image {i + 1}: {str(result)}"
-                else:
-                    text_parts[i] = result
+            # Process images using ThreadPoolExecutor
+            max_workers = min(8, len(images))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all image processing tasks
+                future_to_image = {}
+                for i, image in enumerate(images):
+                    future = executor.submit(
+                        self._process_image_sync, 
+                        image, 
+                        prompt, 
+                        page_number=i
+                    )
+                    future_to_image[future] = i
+                
+                # Collect results as they complete
+                text_parts = [""] * len(images)  # Pre-allocate list
+                for future in as_completed(future_to_image.keys()):
+                    image_index = future_to_image[future]
+                    try:
+                        result = future.result()
+                        text_parts[image_index] = result
+                            
+                    except Exception as e:
+                        logger.error(f"Error processing image {image_index + 1}: {str(e)}")
+                        text_parts[image_index] = f"Error processing image {image_index + 1}: {str(e)}"
                 
             # Clean up images after all processing is complete
             if 'images' in locals():
