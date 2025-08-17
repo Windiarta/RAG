@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class GeminiClient:
 	"""Wrapper around Google Gemini for embeddings and generation."""
 
-	def __init__(self, api_key: Optional[str] = None, embeddings_model: str = "models/text-embedding-004", generation_model: str = "gemini-2.0-flash") -> None:
+	def __init__(self, api_key: Optional[str] = None, embeddings_model: str = "models/gemini-embedding-001", generation_model: str = "gemini-2.0-flash-lite") -> None:
 		configure_logging()
 		load_dotenv()
 		self.api_key = api_key or os.getenv("GEMINI_API_KEY")

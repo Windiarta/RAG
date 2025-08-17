@@ -105,14 +105,14 @@ class VectorStore:
 				unique[doc_id] = meta
 		return [(k, v) for k, v in unique.items()]
 
-	def query(self, document_id: str, query_text: str, n_results: int = 4):
+	def query(self, document_id: str | None = None, query_text: str = "", n_results: int = 4):
 		"""Query within a document's chunks and return Chroma results."""
 		logger.debug("Query: doc_id=%s n_results=%d question_len=%d", document_id, n_results, len(query_text or ""))
 		# ids are always returned by Chroma; include only supported fields
 		return self._collection.query(
 			query_texts=[query_text],
 			n_results=n_results,
-			where={"document_id": document_id},
+			where={"document_id": document_id} if document_id is not None else None,
 			include=["documents", "metadatas", "distances"],
 		)
 

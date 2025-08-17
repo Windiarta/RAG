@@ -172,15 +172,11 @@ async def api_answer(question: str = Form(...), prompt: str = Form(""), filters:
 	flt = json.loads(filters or "{}")
 	retriever = Retriever()
 	# Limit to a single document if provided
-	if "document_id" in flt:
-		result = retriever.ask(question=question, document_id=flt["document_id"], top_k=top_k)
-	else:
-		# If none specified, pick first document
-		store = retriever.store
-		docs = store.list_documents()
-		if not docs:
-			raise HTTPException(status_code=400, detail="No documents available")
-		result = retriever.ask(question=question, document_id=docs[0][0], top_k=top_k)
+	result = retriever.ask(
+		question=question, 
+		document_id=flt["document_id"] if "document_id" in flt else None, 
+		top_k=top_k
+	)
 	return result
 
 
