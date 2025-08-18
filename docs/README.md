@@ -1,41 +1,83 @@
-# RAG Library and Streamlit App
+# RAG (Retrieval-Augmented Generation) Web UI
 
-## Run with Docker
+RAG is an application for document management, text extraction (PDF/TXT/MD), chunking, vector indexing with ChromaDB, and context-based question answering using Google Gemini. It features a modern WebUI (React) and a FastAPI backend.
 
-1. Create a `.env` file:
+## Features
+- Upload documents (PDF, TXT, MD)
+- Automatic text extraction (optional OCR for PDFs)
+- Text chunking
+- Vector storage in ChromaDB
+- Contextual search & question answering (RAG)
+- Document deletion & metadata management
+- Modern WebUI (React + Vite)
+- FastAPI endpoints (upload, retrieve, answer, document management)
+- Docker support
 
+## Architecture Overview
+- **Backend**: FastAPI, ChromaDB, Google Gemini API
+- **Frontend**: React (Vite), communicates with backend via REST API
+- **Storage**: ChromaDB (persistent at `data/chroma`)
+- **OCR**: Google Gemini Vision (optional)
+
+## Installation & Running
+
+### 1. Prepare `.env`
+Create a `.env` file in the project root:
 ```
-GEMINI_API_KEY=your_key_here
+GEMINI_API_KEY=your_google_gemini_api_key
 ```
 
-2. Start:
-
+### 2. Run with Docker
 ```
 docker compose up --build
 ```
+Access the WebUI at: http://localhost:8000/web/
 
-App will be on `http://localhost:8501`.
+### 3. Run for Development
+- Install Python dependencies:
+  ```
+  pip install -r requirements.txt
+  ```
+- Start the backend:
+  ```
+  uvicorn src.api.server:app --reload --host 0.0.0.0 --port 8000
+  ```
+- Start the frontend (WebUI):
+  ```
+  cd src/webui
+  npm install
+  npm run dev
+  # WebUI: http://localhost:5173 (proxy to backend)
+  ```
 
-## Development
+## Usage
+### WebUI
+- Upload documents, optionally set a name
+- Select a document and ask questions in the Chatbot
+- View, search, and delete documents in the Document Manager
 
-- Run tests:
+### API Endpoints (FastAPI)
+- `/api/upload` : Upload documents
+- `/api/retrieve` : Retrieve top-k relevant chunks
+- `/api/answer` : Contextual Q&A (RAG)
+- `/api/documents` : List documents
+- `/api/documents/{document_id}` : Delete document
 
+## Environment & Configuration
+- Default config in `src/api/config.yaml`
+- Data & vectors stored in the `data/` folder
+- Key variables: `GEMINI_API_KEY`, `CHROMA_PATH`, `UPLOAD_DIR`
+
+## Testing
 ```
 pip install -r requirements.txt
-pytest -q
+pytest -q src/test/
 ```
 
-- Run Streamlit locally:
+## Notes
+- ChromaDB persists automatically in `data/chroma`
+- WebUI is built automatically during Docker build (if Node/NPM available)
 
-```
-streamlit run src/streamlit/chats.py
-```
-
-## Features
-
-- Upload documents (PDF/TXT/MD)
-- Store chunks in ChromaDB
-- Ask questions per selected document
-- Delete documents
-- Gemini 2.0 Flash for generation; text-embedding-004 for embeddings
+---
+Contributions & feedback are welcome!
 
