@@ -33,22 +33,21 @@ docker compose up --build
 ```
 Access the WebUI at: http://localhost:8000/
 
-### 3. Run for Development
+### 3. Run for Development (Python version 3.11)
 - Install Python dependencies:
   ```
   pip install -r requirements.txt
   ```
 - Start the backend:
   ```
-  uvicorn src.api.server:app --reload --host 0.0.0.0 --port 8000
+  cd src
+  uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
   ```
-- Start the frontend (WebUI):
+- Notes: 
   ```
-  cd src/webui
-  npm install
-  npm run dev
-  # WebUI: http://localhost:5173 (proxy to backend)
+  Make sure your device already have poppler-utils and npm
   ```
+- Access the WebUI at: http://localhost:8000/
 
 ## Usage
 ### WebUI
