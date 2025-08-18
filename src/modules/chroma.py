@@ -75,7 +75,7 @@ class VectorStore:
 			raise ValueError("No chunks provided")
 		document_id = document_id or str(uuid.uuid4())
 		ids: IDs = [f"{document_id}:{i}" for i in range(len(chunks))]
-		metas: Metadatas = [{"document_id": document_id, **(metadata or {})} for _ in chunks]
+		metas: Metadatas = [{"document_id": document_id, "chunk_number": i, **(metadata or {})} for i, _ in enumerate(chunks)]
 		self._collection.add(ids=ids, documents=chunks, metadatas=metas)
 		logger.info("Indexed %d provided chunks for document_id=%s", len(ids), document_id)
 		return document_id
@@ -109,6 +109,7 @@ class VectorStore:
 		"""Query within a document's chunks and return Chroma results."""
 		logger.debug("Query: doc_id=%s n_results=%d question_len=%d", document_id, n_results, len(query_text or ""))
 		# ids are always returned by Chroma; include only supported fields
+
 		return self._collection.query(
 			query_texts=[query_text],
 			n_results=n_results,
@@ -116,4 +117,14 @@ class VectorStore:
 			include=["documents", "metadatas", "distances"],
 		)
 
+	def manager_query(self, query_text: str = "", n_results: int = 4):
+		"""Query within a document's chunks and return Chroma results."""
+		logger.debug("Query: n_results=%d question_len=%d", n_results, len(query_text or ""))
+		# ids are always returned by Chroma; include only supported fields
+		return self._collection.query(
+			query_texts=[query_text],
+			n_results=n_results,
+			where={"chunk_number": 0},
+			include=["documents", "metadatas", "distances"],
+		)
 
