@@ -31,7 +31,7 @@ GEMINI_API_KEY=your_google_gemini_api_key
 ```
 docker compose up --build
 ```
-Access the WebUI at: http://localhost:8000/web/
+Access the WebUI at: http://localhost:8000/
 
 ### 3. Run for Development
 - Install Python dependencies:
